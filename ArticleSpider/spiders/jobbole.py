@@ -1,15 +1,41 @@
 # -*- coding: utf-8 -*-
 import scrapy
 import re
+from scrapy.http import Request
+from urllib import parse
+
 
 class JobboleSpider(scrapy.Spider):
     name = "jobbole"
     allowed_domains = ["blog.jobbole.com"]
     # start_urls是一个待爬取的列表.
     # spider会为我们请求下载网页，直接到parse阶段
-    start_urls = ['http://blog.jobbole.com/114050/']
+    start_urls = ['http://blog.jobbole.com/all-posts/']
 
     def parse(self, response):
+        '''
+        1、获取文章列表页中的文章url并交给scrapy下载后进行解析
+        2、获取下一页的url并交给scrapy进行下载，下载完成后交给parse
+        '''
+        # 解析所有列表页的所有文章url并交给scrapy下载后并解析
+        # 注意不止获取我们的目标url，还会获取多余的url，我们需要过滤
+        # 我们可以往上在找一个独一的属性,注意id属性使用#
+        # post_urls = response.css(".floated-thumb .post-thumb a::attr(href)").extract_first()
+        post_urls = response.css("#archive .floated-thumb .post-thumb a::attr(href)").extract()
+        for post_url in post_urls:
+            # 注意有些url是没有域名的，只有简单1，2，这是我们得加上域名
+            # 然后回调函数只需要给个函数它自己就会去调用
+            yield Request(url=parse.urljoin(response.url, post_url), callback=self.detail_parse)
+        # 获取下一页链接并交给scrapy下载
+        # .next.page-number是两个class一起的
+        # 回调函数不在是detail而是parse
+        next_url = response.css(".next.page-numbers::attr(href)")
+        if next_url:
+            yield Request(url=parse.urljoin(response.url, post_url), callback=self.parse)
+        pass
+
+
+    def detail_parse(self, response):
         # 使用xpath提取文章的具体字段
         # 注意不要使用/html/....有时候会取不到，因为会有ajax或者js动态生成的元素
         # 然后要用extract_first(""),因为如果用extract()[0]数组下标取不到会报错
